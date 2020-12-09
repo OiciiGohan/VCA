@@ -163,5 +163,5 @@ def display_data():
 
 
 #video_list = create_video_list()
-#renew_view_data()
-display_data()
+renew_view_data()
+#display_data()
