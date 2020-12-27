@@ -12,22 +12,20 @@ import os
 import time
 from apiclient.discovery import build   #YouTubeAPI使うのに必要
 
-
-API_KEY = 'AIzaSyCBCOpLV2pj0VKjrGzS3xjNWQIDDJaEISU'
-YOUTUBE_API_SERVICE_NAME = 'youtube'
-YOUTUBE_API_VERSION = 'v3'
-youtube = build(
-    YOUTUBE_API_SERVICE_NAME,
-    YOUTUBE_API_VERSION,
-    developerKey=API_KEY
-)
-
 def getmovinfo(video_id):
+    API_KEY = ''
+    YOUTUBE_API_SERVICE_NAME = 'youtube'
+    YOUTUBE_API_VERSION = 'v3'
+    youtube = build(
+        YOUTUBE_API_SERVICE_NAME,
+        YOUTUBE_API_VERSION,
+        developerKey=API_KEY
+    )
     response = youtube.videos().list(
       part = 'snippet,statistics',
       id = video_id
       ).execute()
-    resinfo = response.get('items',[]) #[0]
+    resinfo = response.get('items',[])
     if resinfo == []:
         return False
     else:
@@ -43,6 +41,12 @@ def getmovinfo(video_id):
         movinfo['mylist_counter'] = False
         movinfo['genre'] = int(resinfo[0]['snippet']['categoryId'])
         movinfo['tags'] = False
+        response_channel = youtube.channels().list(
+                    part = 'snippet,statistics',
+                    id = movinfo['user_id']
+                    ).execute()
+        channelinfo = response_channel.get("items", [])
+        movinfo['subscriberCount'] = channelinfo[0]['statistics']['subscriberCount']
         return movinfo
 
 #ニコニコと同じです
@@ -141,4 +145,5 @@ def display_data():
   plt.show()
 
 movinfo = getmovinfo("1xVkRh7mEe0")
-print(calc_elapsed_time(movinfo))
+#print(calc_elapsed_time(movinfo))
+print(movinfo)
