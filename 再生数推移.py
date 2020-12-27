@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import json
 import os
 import time
+import requests, bs4 #ニコニコでユーザー情報を取得するのに必要
 
 def getthumbinfo(video_id):
     u = urllib.request.urlopen('http://ext.nicovideo.jp/api/getthumbinfo/' + video_id)
@@ -37,6 +38,19 @@ def test(video_id):
         for i in tags:
             print(i.text)
 
+def getuserinfo(user_id):
+  res = requests.get('https://www.nicovideo.jp/user/' + user_id + '/follow/follower?ref=pc_userpage_top')
+  res.raise_for_status()
+  soup = bs4.BeautifulSoup(res.text, "html.parser")
+  elms = soup.find(id = "js-initial-userpage-data")
+  #elms = [tag.text for tag in soup('a')]
+  elm = json.loads(elms.attrs['data-initial-data'])
+  userinfo = {}
+  userinfo['followerCount'] = elm['userDetails']['userDetails']['user']['followerCount']
+  userinfo['followeeCount'] = elm['userDetails']['userDetails']['user']['followeeCount']
+  userinfo['isPremium'] = elm['userDetails']['userDetails']['user']['isPremium']
+  return userinfo
+
 def getmovinfo(video_id):
     thumbinfo = getthumbinfo(video_id)
     movinfo = {}
@@ -59,6 +73,7 @@ def getmovinfo(video_id):
         movinfo['tags'] = []
         for i in tags:
             movinfo['tags'].append(i.text)
+        movinfo['subscriberCount'] = getuserinfo(movinfo['user_id'])['followerCount']
         return movinfo
     else:
         return False
@@ -183,3 +198,4 @@ for video_id in video_list:
 #renew_view_data()
 movinfo = getmovinfo("sm37970782")
 print(movinfo)
+#print(getuserinfo("82669020"))
