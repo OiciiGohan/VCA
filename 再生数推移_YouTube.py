@@ -112,6 +112,7 @@ def save_view_data(video_id):
       data['user_id'] = movinfo['user_id']
       data['user_nickname'] = movinfo['user_nickname']
       data['genre'] = movinfo['genre']
+      data['length'] = movinfo['length']
       data['tags'] = movinfo['tags']
       data['view_data'] = []
   e_time = calc_elapsed_time(movinfo)
