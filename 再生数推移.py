@@ -106,6 +106,7 @@ def save_view_data(video_id):
       data['user_id'] = movinfo['user_id']
       data['user_nickname'] = movinfo['user_nickname']
       data['genre'] = movinfo['genre']
+      data['length'] = movinfo['length']
       data['tags'] = movinfo['tags']
       data['view_data'] = []
   e_time = calc_elapsed_time(movinfo)
@@ -158,10 +159,15 @@ def display_data():
   plt.xlabel("elapsed time[h]")
   plt.ylabel("view")
   #plt.yscale("log")
-  #plt.legend(data_plt, file_list, loc=2)
+  #plt.legend(data_plt, file_list, loc=4)
   plt.show()
 
 
 #video_list = create_video_list()
-renew_view_data()
+#renew_view_data()
 #display_data()
+
+"""video_list = ["sm37970782", "sm37970823", "sm37970836"]
+for video_id in video_list:
+  save_view_data(video_id)"""
+renew_view_data()
