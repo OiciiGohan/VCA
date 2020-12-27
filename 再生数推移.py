@@ -53,7 +53,7 @@ def getmovinfo(video_id):
         movinfo['view_counter'] = thumb.find('view_counter').text
         movinfo['comment_num'] = thumb.find('comment_num').text
         movinfo['mylist_counter'] = thumb.find('mylist_counter').text
-        movinfo['length'] = thumb.find('length').text
+        movinfo['length'] = conv_time_str(thumb.find('length').text)
         movinfo['genre'] = thumb.find('genre').text
         tags = list(thumb.find('tags'))
         movinfo['tags'] = []
@@ -89,6 +89,16 @@ def calc_elapsed_time(movinfo):   #投稿からの経過時間[h]を測定
   dt_delta = dt_now - date_dt
   e_time = dt_delta.days * 24 + int(dt_delta.seconds / 3600)
   return e_time
+
+def conv_time_str(input_str, separator = ":"):
+  temp = 0
+  str_list = input_str.split(separator)
+  temp += int(str_list[-1])
+  if len(str_list) >= 2:
+    temp += int(str_list[-2]) * 60
+    if len(str_list) >= 3:
+      temp += int(str_list[-3]) * 3600
+  return temp
 
 def save_view_data(video_id):
   movinfo = getmovinfo(video_id)
@@ -170,4 +180,6 @@ def display_data():
 """video_list = ["sm37970782", "sm37970823", "sm37970836"]
 for video_id in video_list:
   save_view_data(video_id)"""
-renew_view_data()
+#renew_view_data()
+movinfo = getmovinfo("sm37970782")
+print(movinfo)
