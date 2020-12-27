@@ -12,6 +12,22 @@ import os
 import time
 from apiclient.discovery import build   #YouTubeAPI使うのに必要
 
+def conv_time_str(input_str):
+  temp = 0
+  if 'H' in input_str:
+      temp += int(input_str[input_str.index('T') + 1 : input_str.index('H')]) * 3600
+      if 'M' in input_str:
+          temp += int(input_str[input_str.index('H') + 1 : input_str.index('M')]) * 60
+          if 'S' in input_str:
+            temp += int(input_str[input_str.index('M') + 1 : input_str.index('S')])
+  elif 'M' in input_str:
+      temp += int(input_str[input_str.index('T') + 1 : input_str.index('M')]) * 60
+      if 'S' in input_str:
+          temp += int(input_str[input_str.index('M') + 1 : input_str.index('S')])
+  else:
+      temp += int(input_str[input_str.index('T') + 1 : input_str.index('S')])
+  return temp
+
 def getmovinfo(video_id):
     API_KEY = ''
     YOUTUBE_API_SERVICE_NAME = 'youtube'
@@ -22,7 +38,7 @@ def getmovinfo(video_id):
         developerKey=API_KEY
     )
     response = youtube.videos().list(
-      part = 'snippet,statistics',
+      part = 'snippet,statistics,contentDetails',
       id = video_id
       ).execute()
     resinfo = response.get('items',[])
@@ -40,6 +56,7 @@ def getmovinfo(video_id):
         movinfo['comment_num'] = False
         movinfo['mylist_counter'] = False
         movinfo['genre'] = int(resinfo[0]['snippet']['categoryId'])
+        movinfo['length'] = conv_time_str(resinfo[0]['contentDetails']['duration'])
         movinfo['tags'] = False
         response_channel = youtube.channels().list(
                     part = 'snippet,statistics',
@@ -144,6 +161,6 @@ def display_data():
   #plt.legend(data_plt, file_list, loc=4)
   plt.show()
 
-movinfo = getmovinfo("1xVkRh7mEe0")
+movinfo = getmovinfo("o8XvMlCoOac")
 #print(calc_elapsed_time(movinfo))
 print(movinfo)
