@@ -90,9 +90,9 @@ def calc_elapsed_time(movinfo):   #投稿からの経過時間[h]を測定
   e_time = dt_delta.days * 24 + int(dt_delta.seconds / 3600)
   return e_time
 
-def conv_time_str(input_str, separator = ":"):
+def conv_time_str(input_str):
   temp = 0
-  str_list = input_str.split(separator)
+  str_list = input_str.split(':')
   temp += int(str_list[-1])
   if len(str_list) >= 2:
     temp += int(str_list[-2]) * 60
