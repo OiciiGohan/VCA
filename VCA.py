@@ -100,7 +100,7 @@ def getmovinfo(video_id):
         else:
             return False
     elif platform == 'youtube':
-        API_KEY = 'AIzaSyA_Ko_j1IpncEGwZl9li0MmEBjstvbULoE'  #【重要】pushする時はKEYは削除すること。
+        API_KEY = ''  #【重要】pushする時はKEYは削除すること。
         YOUTUBE_API_SERVICE_NAME = 'youtube'
         YOUTUBE_API_VERSION = 'v3'
         youtube = build(
