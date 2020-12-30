@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import json
 import os
 import time
-import requests, bs4 #ニコニコでユーザー情報を取得するのに必要
+import requests, bs4 #ニコニコでユーザー情報を取得するのに必要。YouTubeのランキングサイトから動画IDを取得するのにも必要。
 from apiclient.discovery import build   #YouTubeAPI使うのに必要
 
 
@@ -50,6 +50,32 @@ def getuserid_youtube(num): #YouTube専用。numはランキングの順位
   link = elms.find('a').get('href')
   user_id = link.lstrip('https://www.youtube.com/channel/')
   return user_id
+
+def getmovlist_youtube(CHANNEL_ID, API_KEY, max_len=100): #YouTube専用 https://qiita.com/yasudadesu/items/df76947f5b6ac955521f を参考にしてます
+  base_url = 'https://www.googleapis.com/youtube/v3'
+  url = base_url + '/search?key=%s&channelId=%s&part=snippet,id&order=date&maxResults=50'
+  infos = []
+  itr = max_len
+  while itr >= 0:
+    time.sleep(30)
+    response = requests.get(url % (API_KEY, CHANNEL_ID))
+    if response.status_code != 200:
+        #print('エラー発生')
+        return False
+        break
+    result = response.json()
+    infos.extend([
+        item['id']['videoId'] for item in result['items'] if item['id']['kind'] == 'youtube#video'
+    ])
+    if 'nextPageToken' in result.keys():
+        if 'pageToken' in url:
+            url = url.split('&pageToken')[0]
+        url += f'&pageToken={result["nextPageToken"]}'
+    else:
+        #print('正常終了')
+        break
+    itr -= 1
+  return infos
 
 def conv_time_str(input_str, platform):
   if platform == 'niconico':
@@ -237,7 +263,7 @@ def save_view_data(video_id):
   with open('view_data/{}.json'.format(video_id), mode='w', encoding='utf-8') as f:
     json.dump(data, f, ensure_ascii=False, indent=4)
 
-def create_video_list(platform, list_len=385, itr_max=1000):
+def create_video_list(platform, list_len=385, itr_max=1000, API_KEY='', waittime=2):
   if platform == 'niconico' or platform == 'both':
     number_list = []
     id_list = []
@@ -249,12 +275,26 @@ def create_video_list(platform, list_len=385, itr_max=1000):
             number_list.append(number)
         id_list.append("sm{}".format(number))
         itr -= 1
-        time.sleep(2)
         print("No.{0}:{1}を調査対象に追加しました".format(1000 - itr, number))
+        time.sleep(waittime)
     return id_list
   elif platform == 'youtube' or platform == 'both':
-    #ここ考えておく
-    return None
+    number_list = []
+    id_list = []
+    itr = itr_max
+    while len(number_list) < list_len or itr >= 0:
+        number = np.random.randint(1, 40000)
+        user_id = getuserid_youtube(number)
+        movlist = getmovlist_youtube(user_id, API_KEY, max_len=100)
+        for i in range(len(movlist)):
+          movinfo = save_view_data(movlist[i])
+          if movinfo != False and number not in number_list:
+              number_list.append(number)
+          id_list.append(movlist[i])
+        itr -= 1
+        print("No.{0}:{1}を調査対象に追加しました".format(1000 - itr, number))
+        time.sleep(waittime)
+    return id_list
   else:
     return False
 
@@ -293,6 +333,7 @@ INPUT_API_KEY = input('API KEYを入力→')
 #print(getmovinfo('sm35285360')) 
 #print(getmovinfo('vUIb9hIi2Z0', API_KEY=INPUT_API_KEY))
 
-print(getuserid_youtube(2))
+user_id = getuserid_youtube(40000)
+print(getmovlist_youtube(user_id, INPUT_API_KEY))
 
 #print(date_to_weekday_hour(getmovinfo('sm35285360')))
