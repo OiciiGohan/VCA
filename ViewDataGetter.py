@@ -33,19 +33,26 @@ def getuserinfo(user_id): #ニコニコ専用
   res.raise_for_status()
   soup = bs4.BeautifulSoup(res.text, "html.parser")
   elms = soup.find(id = "js-initial-userpage-data")
-  #elms = [tag.text for tag in soup('a')]
+  #print(elms)
   elm = json.loads(elms.attrs['data-initial-data'])
-  userinfo = {}
-  userinfo['followerCount'] = elm['userDetails']['userDetails']['user']['followerCount']
-  userinfo['followeeCount'] = elm['userDetails']['userDetails']['user']['followeeCount']
-  userinfo['isPremium'] = elm['userDetails']['userDetails']['user']['isPremium']
-  return userinfo
+  if elm == None:
+    return None
+  else:
+    userinfo = {}
+    userinfo['followerCount'] = elm['userDetails']['userDetails']['user']['followerCount']
+    userinfo['followeeCount'] = elm['userDetails']['userDetails']['user']['followeeCount']
+    userinfo['isPremium'] = elm['userDetails']['userDetails']['user']['isPremium']
+    #print(userinfo)
+    return userinfo
 
 def getuserid_youtube(num): #YouTube専用。numはランキングの順位
   res = requests.get('https://ytranking.net/channel/' + str(num) + '/')
   res.raise_for_status()
   soup = bs4.BeautifulSoup(res.text, "html.parser")
   elms = soup.find('p', class_='thumbnail')
+  if elms == None:
+    print("リンクにエラーがあります")
+    return None
   link = elms.find('a').get('href')
   user_id = link.lstrip('https://www.youtube.com/channel/')
   return user_id
@@ -57,12 +64,11 @@ def getmovlist_youtube(CHANNEL_ID, API_KEY, max_len=5): #YouTube専用 https://q
   itr = max_len
   while itr >= 0:
     print('ユーザー{0}の動画リストをチェック中...{1}'.format(CHANNEL_ID, max_len-itr+1))
-    time.sleep(2)
+    time.sleep(10)
     response = requests.get(url % (API_KEY, CHANNEL_ID))
     if response.status_code != 200:
-        #print('エラー発生')
-        return False
-        break
+        print('エラー発生')
+        return None
     result = response.json()
     infos.extend([
         item['id']['videoId'] for item in result['items'] if item['id']['kind'] == 'youtube#video'
@@ -72,9 +78,10 @@ def getmovlist_youtube(CHANNEL_ID, API_KEY, max_len=5): #YouTube専用 https://q
             url = url.split('&pageToken')[0]
         url += f'&pageToken={result["nextPageToken"]}'
     else:
-        #print('正常終了')
+        ##print('正常終了')
         break
     itr -= 1
+    print(infos)
   return infos
 
 def conv_time_str(input_str, platform):
@@ -103,7 +110,7 @@ def conv_time_str(input_str, platform):
         temp += int(input_str[input_str.index('T') + 1 : input_str.index('S')])
     return temp
   else:
-    return False
+    return None
 
 def getmovinfo(video_id, API_KEY=''):
     platform = check_platform(video_id)
@@ -133,7 +140,7 @@ def getmovinfo(video_id, API_KEY=''):
             movinfo['subscriberCount'] = getuserinfo(movinfo['user_id'])['followerCount']
             return movinfo
         else:
-            return False
+            return None
     elif platform == 'youtube':
         YOUTUBE_API_SERVICE_NAME = 'youtube'
         YOUTUBE_API_VERSION = 'v3'
@@ -148,7 +155,7 @@ def getmovinfo(video_id, API_KEY=''):
         ).execute()
         resinfo = response.get('items',[])
         if resinfo == []:
-            return False
+            return None
         else:
             movinfo = {}
             movinfo['platform'] = 'youtube'
@@ -159,11 +166,11 @@ def getmovinfo(video_id, API_KEY=''):
             movinfo['user_nickname'] = resinfo[0]['snippet']['channelTitle']
             movinfo['first_retrieve'] = resinfo[0]['snippet']['publishedAt']
             movinfo['view_counter'] = resinfo[0]['statistics']['viewCount']
-            movinfo['comment_num'] = False
-            movinfo['mylist_counter'] = False
+            movinfo['comment_num'] = None
+            movinfo['mylist_counter'] = None
             movinfo['length'] = conv_time_str(resinfo[0]['contentDetails']['duration'], 'youtube')
             movinfo['genre'] = int(resinfo[0]['snippet']['categoryId'])
-            movinfo['tags'] = False
+            movinfo['tags'] = None
             response_channel = youtube.channels().list(
                         part = 'snippet,statistics',
                         id = movinfo['user_id']
@@ -172,7 +179,7 @@ def getmovinfo(video_id, API_KEY=''):
             movinfo['subscriberCount'] = channelinfo[0]['statistics']['subscriberCount']
             return movinfo
     else:
-        return False
+        return None
 
 def download_file(url, dst_path):
     try:
@@ -211,7 +218,7 @@ def calc_elapsed_time(movinfo):   #投稿からの経過時間[h]を測定
     e_time = dt_delta.days * 24 + int(dt_delta.seconds / 3600)
     return e_time
   else:
-    return False
+    return None
 
 def date_to_weekday_hour(movinfo):
   platform = check_platform(movinfo['video_id'])
@@ -230,12 +237,12 @@ def date_to_weekday_hour(movinfo):
     weekday_time['hour'] = int(date_dt.strftime('%H')) + int(date_dt.strftime('%M'))/60 + int(date_dt.strftime('%S'))/3600
     return weekday_time
   else:
-    return False
+    return None
 
 def save_view_data(video_id, API_KEY=''):
   movinfo = getmovinfo(video_id, API_KEY)
-  if movinfo == False:
-    return False
+  if movinfo == None:
+    return None
   if not os.path.exists('thumbnails/{}.jpg'.format(video_id)):
     download_thumbnail(movinfo)
   if os.path.exists('view_data/{}.json'.format(video_id)):
@@ -261,9 +268,9 @@ def save_view_data(video_id, API_KEY=''):
   view_counter = int(movinfo['view_counter'])
   data['view_data'].append([e_time, view_counter])
   with open('view_data/{}.json'.format(video_id), mode='w', encoding='utf-8') as f:
-    json.dump(data, f, ensure_ascii=False, indent=4)
+    json.dump(data, f, ensure_ascii=None, indent=4)
 
-def create_video_list(platform, list_len=385, itr_max=1000, API_KEY='', waittime=2): #platformをyoutubeに設定したら必ずAPIを記入すること。
+def create_video_list(platform, list_len=385, itr_max=1000, API_KEY='', waittime=10): #platformをyoutubeに設定したら必ずAPIを記入すること。
   if platform == 'niconico':
     number_list = []
     id_list = []
@@ -271,11 +278,11 @@ def create_video_list(platform, list_len=385, itr_max=1000, API_KEY='', waittime
     while len(number_list) < list_len or itr >= 0:
         number = np.random.randint(9, 38038500)
         movinfo = save_view_data("sm{}".format(number))
-        if movinfo != False and number not in number_list:
+        if movinfo != None and number not in number_list:
             number_list.append(number)
         id_list.append("sm{}".format(number))
-        itr -= 1
         print("No.{0}:{1}を調査対象に追加しました".format(1000 - itr, number))
+        itr -= 1
         time.sleep(waittime)
     return id_list
   elif platform == 'youtube':
@@ -285,19 +292,19 @@ def create_video_list(platform, list_len=385, itr_max=1000, API_KEY='', waittime
         number = np.random.randint(1, 40000)
         user_id = getuserid_youtube(number)
         movlist = getmovlist_youtube(user_id, API_KEY, max_len=10)
-        if movlist == [] or movlist == False:
+        if movlist == [] or movlist == None:
           continue
         print(movlist)
         mov_id = np.random.choice(movlist)
         movinfo = save_view_data(mov_id, API_KEY)
-        if movinfo != False and mov_id not in id_list:
+        if movinfo != None and mov_id not in id_list:
           id_list.append(mov_id)
         itr -= 1
         print("No.{0}:{1}を調査対象に追加しました".format(1000 - itr, mov_id))
         time.sleep(waittime)
     return id_list
   else:
-    return False
+    return None
 
 def renew_view_data(waittime=2, API_KEY=''):
   video_list = []
@@ -331,10 +338,6 @@ def display_data():
   plt.show()
 
 INPUT_API_KEY = input('API KEYを入力→')
-#print(getmovinfo('sm35285360')) 
-#print(getmovinfo('vUIb9hIi2Z0', API_KEY=INPUT_API_KEY))
-#user_id = getuserid_youtube(40000)
-#print(getmovlist_youtube(user_id, INPUT_API_KEY))
-#print(date_to_weekday_hour(getmovinfo('sm35285360')))
 create_video_list('youtube', list_len=100, API_KEY=INPUT_API_KEY)
-create_video_list('niconico', list_len=100)
+#create_video_list('niconico', list_len=100)
+#print(getmovinfo('sm9'))
