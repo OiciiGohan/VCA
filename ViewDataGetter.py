@@ -178,6 +178,25 @@ def calc_elapsed_time(movinfo):   #投稿からの経過時間[h]を測定
   else:
     return False
 
+def date_to_weekday_hour(movinfo):
+  platform = check_platform(movinfo['video_id'])
+  weekday_time = {}
+  if platform == 'niconico':
+    date_str = movinfo['first_retrieve'].split('+')[0]
+    date_str = date_str + "+0900"
+    date_dt = datetime.datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%S%z')
+    weekday_time['weekday'] = date_dt.strftime('%a')
+    weekday_time['hour'] = int(date_dt.strftime('%H')) + int(date_dt.strftime('%M'))/60 + int(date_dt.strftime('%S'))/3600
+    return weekday_time
+  elif platform == 'youtube':
+    date_str = movinfo['first_retrieve']
+    date_dt = datetime.datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%S%z')
+    weekday_time['weekday'] = date_dt.strftime('%a')
+    weekday_time['hour'] = int(date_dt.strftime('%H')) + int(date_dt.strftime('%M'))/60 + int(date_dt.strftime('%S'))/3600
+    return weekday_time
+  else:
+    return False
+
 def save_view_data(video_id):
   movinfo = getmovinfo(video_id)
   if movinfo == False:
@@ -193,9 +212,15 @@ def save_view_data(video_id):
       data['title'] = movinfo['title']
       data['user_id'] = movinfo['user_id']
       data['user_nickname'] = movinfo['user_nickname']
+      data['subscriberCount'] = movinfo['subscriberCount']
       data['genre'] = movinfo['genre']
       data['length'] = movinfo['length']
       data['tags'] = movinfo['tags']
+      data['first_retrieve'] = movinfo['first_retrieve']
+      data['first_retrieve_weekday'] = date_to_weekday_hour(movinfo)['weekday']
+      data['first_retrieve_hour'] = date_to_weekday_hour(movinfo)['hour']
+      #data['comment_num'] = movinfo['comment_num']
+      #data['mylist_counter'] = movinfo['mylist_counter']
       data['view_data'] = []
   e_time = calc_elapsed_time(movinfo)
   view_counter = int(movinfo['view_counter'])
@@ -203,13 +228,13 @@ def save_view_data(video_id):
   with open('view_data/{}.json'.format(video_id), mode='w', encoding='utf-8') as f:
     json.dump(data, f, ensure_ascii=False, indent=4)
 
-def create_video_list(platform):
-  if platform == 'niconico':
+def create_video_list(platform, list_len=385, itr_max=1000):
+  if platform == 'niconico' or platform == 'both':
     number_list = []
     id_list = []
-    itr = 1000
-    while len(number_list) < 385 or itr >= 0:
-        number = np.random.randint(37917131, 37924143)
+    itr = itr_max
+    while len(number_list) < list_len or itr >= 0:
+        number = np.random.randint(9, 38038500)
         movinfo = save_view_data("sm{}".format(number))
         if movinfo != False and number not in number_list:
             number_list.append(number)
@@ -218,7 +243,7 @@ def create_video_list(platform):
         time.sleep(2)
         print("No.{0}:{1}を調査対象に追加しました".format(1000 - itr, number))
     return id_list
-  elif platform == 'youtube':
+  elif platform == 'youtube' or platform == 'both':
     #ここ考えておく
     return None
   else:
@@ -255,6 +280,8 @@ def display_data():
   #plt.legend(data_plt, file_list, loc=4)
   plt.show()
 
-INPUT_API_KEY = input('API KEYを入力→')
-print(getmovinfo('sm35285360')) 
-print(getmovinfo('ntLjA5_0uUQ', API_KEY=INPUT_API_KEY))
+#INPUT_API_KEY = input('API KEYを入力→')
+#print(getmovinfo('sm35285360')) 
+#print(getmovinfo('ntLjA5_0uUQ', API_KEY=INPUT_API_KEY))
+
+print(date_to_weekday_hour(getmovinfo('sm35285360')))
