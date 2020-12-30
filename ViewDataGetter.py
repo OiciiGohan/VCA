@@ -42,6 +42,15 @@ def getuserinfo(user_id): #ニコニコ専用
   userinfo['isPremium'] = elm['userDetails']['userDetails']['user']['isPremium']
   return userinfo
 
+def getuserid_youtube(num): #YouTube専用。numはランキングの順位
+  res = requests.get('https://ytranking.net/channel/' + str(num) + '/')
+  res.raise_for_status()
+  soup = bs4.BeautifulSoup(res.text, "html.parser")
+  elms = soup.find('p', class_='thumbnail')
+  link = elms.find('a').get('href')
+  user_id = link.lstrip('https://www.youtube.com/channel/')
+  return user_id
+
 def conv_time_str(input_str, platform):
   if platform == 'niconico':
     temp = 0
@@ -280,8 +289,10 @@ def display_data():
   #plt.legend(data_plt, file_list, loc=4)
   plt.show()
 
-#INPUT_API_KEY = input('API KEYを入力→')
+INPUT_API_KEY = input('API KEYを入力→')
 #print(getmovinfo('sm35285360')) 
-#print(getmovinfo('ntLjA5_0uUQ', API_KEY=INPUT_API_KEY))
+#print(getmovinfo('vUIb9hIi2Z0', API_KEY=INPUT_API_KEY))
 
-print(date_to_weekday_hour(getmovinfo('sm35285360')))
+print(getuserid_youtube(2))
+
+#print(date_to_weekday_hour(getmovinfo('sm35285360')))
