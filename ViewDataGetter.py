@@ -50,13 +50,14 @@ def getuserid_youtube(num): #YouTube専用。numはランキングの順位
   user_id = link.lstrip('https://www.youtube.com/channel/')
   return user_id
 
-def getmovlist_youtube(CHANNEL_ID, API_KEY, max_len=100): #YouTube専用 https://qiita.com/yasudadesu/items/df76947f5b6ac955521f を参考にしてます
+def getmovlist_youtube(CHANNEL_ID, API_KEY, max_len=5): #YouTube専用 https://qiita.com/yasudadesu/items/df76947f5b6ac955521f を参考にしてます
   base_url = 'https://www.googleapis.com/youtube/v3'
   url = base_url + '/search?key=%s&channelId=%s&part=snippet,id&order=date&maxResults=50'
   infos = []
   itr = max_len
   while itr >= 0:
-    time.sleep(30)
+    print('ユーザー{0}の動画リストをチェック中...{1}'.format(CHANNEL_ID, max_len-itr+1))
+    time.sleep(2)
     response = requests.get(url % (API_KEY, CHANNEL_ID))
     if response.status_code != 200:
         #print('エラー発生')
@@ -262,8 +263,8 @@ def save_view_data(video_id, API_KEY=''):
   with open('view_data/{}.json'.format(video_id), mode='w', encoding='utf-8') as f:
     json.dump(data, f, ensure_ascii=False, indent=4)
 
-def create_video_list(platform, list_len=385, itr_max=1000, API_KEY='', waittime=2): #platformをbothやyoutubeに設定したら必ずAPIを記入すること。
-  if platform == 'niconico' or platform == 'both':
+def create_video_list(platform, list_len=385, itr_max=1000, API_KEY='', waittime=2): #platformをyoutubeに設定したら必ずAPIを記入すること。
+  if platform == 'niconico':
     number_list = []
     id_list = []
     itr = itr_max
@@ -277,25 +278,28 @@ def create_video_list(platform, list_len=385, itr_max=1000, API_KEY='', waittime
         print("No.{0}:{1}を調査対象に追加しました".format(1000 - itr, number))
         time.sleep(waittime)
     return id_list
-  elif platform == 'youtube' or platform == 'both':
+  elif platform == 'youtube':
     id_list = []
     itr = itr_max
-    while len(number_list) < list_len or itr >= 0:
+    while len(id_list) < list_len or itr >= 0:
         number = np.random.randint(1, 40000)
         user_id = getuserid_youtube(number)
-        movlist = getmovlist_youtube(user_id, API_KEY, max_len=100)
+        movlist = getmovlist_youtube(user_id, API_KEY, max_len=10)
+        if movlist == [] or movlist == False:
+          continue
+        print(movlist)
         mov_id = np.random.choice(movlist)
         movinfo = save_view_data(mov_id, API_KEY)
         if movinfo != False and mov_id not in id_list:
-          id_list.append(movlist[i])
+          id_list.append(mov_id)
         itr -= 1
-        print("No.{0}:{1}を調査対象に追加しました".format(1000 - itr, number))
+        print("No.{0}:{1}を調査対象に追加しました".format(1000 - itr, mov_id))
         time.sleep(waittime)
     return id_list
   else:
     return False
 
-def renew_view_data(waittime=2, API_KEY):
+def renew_view_data(waittime=2, API_KEY=''):
   video_list = []
   file_list = os.listdir("./view_data")
   for file_name in file_list:
@@ -329,8 +333,8 @@ def display_data():
 INPUT_API_KEY = input('API KEYを入力→')
 #print(getmovinfo('sm35285360')) 
 #print(getmovinfo('vUIb9hIi2Z0', API_KEY=INPUT_API_KEY))
-
-user_id = getuserid_youtube(40000)
-print(getmovlist_youtube(user_id, INPUT_API_KEY))
-
+#user_id = getuserid_youtube(40000)
+#print(getmovlist_youtube(user_id, INPUT_API_KEY))
 #print(date_to_weekday_hour(getmovinfo('sm35285360')))
+create_video_list('youtube', list_len=100, API_KEY=INPUT_API_KEY)
+create_video_list('niconico', list_len=100)
