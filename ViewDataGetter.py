@@ -15,7 +15,6 @@ import time
 import requests, bs4 #ニコニコでユーザー情報を取得するのに必要。YouTubeのランキングサイトから動画IDを取得するのにも必要。
 from apiclient.discovery import build   #YouTubeAPI使うのに必要
 
-
 def check_platform(video_id): #video_idからプラットフォームを自動で判定する
     if video_id[2:].isdecimal():
           platform = 'niconico'
@@ -232,8 +231,8 @@ def date_to_weekday_hour(movinfo):
   else:
     return False
 
-def save_view_data(video_id):
-  movinfo = getmovinfo(video_id)
+def save_view_data(video_id, API_KEY=''):
+  movinfo = getmovinfo(video_id, API_KEY)
   if movinfo == False:
     return False
   if not os.path.exists('thumbnails/{}.jpg'.format(video_id)):
@@ -263,7 +262,7 @@ def save_view_data(video_id):
   with open('view_data/{}.json'.format(video_id), mode='w', encoding='utf-8') as f:
     json.dump(data, f, ensure_ascii=False, indent=4)
 
-def create_video_list(platform, list_len=385, itr_max=1000, API_KEY='', waittime=2):
+def create_video_list(platform, list_len=385, itr_max=1000, API_KEY='', waittime=2): #platformをbothやyoutubeに設定したら必ずAPIを記入すること。
   if platform == 'niconico' or platform == 'both':
     number_list = []
     id_list = []
@@ -279,17 +278,15 @@ def create_video_list(platform, list_len=385, itr_max=1000, API_KEY='', waittime
         time.sleep(waittime)
     return id_list
   elif platform == 'youtube' or platform == 'both':
-    number_list = []
     id_list = []
     itr = itr_max
     while len(number_list) < list_len or itr >= 0:
         number = np.random.randint(1, 40000)
         user_id = getuserid_youtube(number)
         movlist = getmovlist_youtube(user_id, API_KEY, max_len=100)
-        for i in range(len(movlist)):
-          movinfo = save_view_data(movlist[i])
-          if movinfo != False and number not in number_list:
-              number_list.append(number)
+        mov_id = np.random.choice(movlist)
+        movinfo = save_view_data(mov_id, API_KEY)
+        if movinfo != False and mov_id not in id_list:
           id_list.append(movlist[i])
         itr -= 1
         print("No.{0}:{1}を調査対象に追加しました".format(1000 - itr, number))
@@ -298,17 +295,17 @@ def create_video_list(platform, list_len=385, itr_max=1000, API_KEY='', waittime
   else:
     return False
 
-def renew_view_data(waittime=3600):
+def renew_view_data(waittime=2, API_KEY):
   video_list = []
   file_list = os.listdir("./view_data")
   for file_name in file_list:
     video_list.append(file_name.split('.', 1)[0])
   while True:
     for video_id in video_list:
-      save_view_data(video_id)
-      time.sleep(2)
+      save_view_data(video_id, API_KEY)
+      time.sleep(waittime)
     print(time.time(), "ファイルを更新しました")
-    time.sleep(waittime)
+    time.sleep(3600)
 
 #データを表示
 def display_data():
