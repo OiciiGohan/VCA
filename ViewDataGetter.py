@@ -57,13 +57,14 @@ def getuserid_youtube(num): #YouTube専用。numはランキングの順位
   user_id = link.lstrip('https://www.youtube.com/channel/')
   return user_id
 
-def getmovlist_youtube(CHANNEL_ID, API_KEY, max_len=5): #YouTube専用 https://qiita.com/yasudadesu/items/df76947f5b6ac955521f を参考にしてます
+def getmovlist_youtube(CHANNEL_ID, API_KEY, max_len=1): #YouTube専用 https://qiita.com/yasudadesu/items/df76947f5b6ac955521f を参考にしてます
   base_url = 'https://www.googleapis.com/youtube/v3'
   url = base_url + '/search?key=%s&channelId=%s&part=snippet,id&order=date&maxResults=50'
   infos = []
   itr = max_len
   while itr >= 0:
-    print('ユーザー{0}の動画リストをチェック中...{1}'.format(CHANNEL_ID, max_len-itr+1))
+    itr -= 1
+    print('ユーザー{0}の動画リストをチェック中... itr={1}'.format(CHANNEL_ID, itr))
     time.sleep(10)
     response = requests.get(url % (API_KEY, CHANNEL_ID))
     if response.status_code != 200:
@@ -80,7 +81,6 @@ def getmovlist_youtube(CHANNEL_ID, API_KEY, max_len=5): #YouTube専用 https://q
     else:
         ##print('正常終了')
         break
-    itr -= 1
     print(infos)
   return infos
 
@@ -291,7 +291,7 @@ def create_video_list(platform, list_len=385, itr_max=1000, API_KEY='', waittime
     while len(id_list) < list_len or itr >= 0:
         number = np.random.randint(1, 40000)
         user_id = getuserid_youtube(number)
-        movlist = getmovlist_youtube(user_id, API_KEY, max_len=10)
+        movlist = getmovlist_youtube(user_id, API_KEY, max_len=1)
         if movlist == [] or movlist == None:
           continue
         print(movlist)
@@ -337,7 +337,7 @@ def display_data():
   #plt.legend(data_plt, file_list, loc=4)
   plt.show()
 
-INPUT_API_KEY = input('API KEYを入力→')
-create_video_list('youtube', list_len=100, API_KEY=INPUT_API_KEY)
-#create_video_list('niconico', list_len=100)
+#INPUT_API_KEY = input('API KEYを入力→')
+#create_video_list('youtube', list_len=100, API_KEY=INPUT_API_KEY)
+create_video_list('niconico', list_len=100)
 #print(getmovinfo('sm9'))
