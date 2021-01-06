@@ -37,7 +37,10 @@ def getuserinfo(user_id): #ニコニコ専用
   elm = json.loads(elms.attrs['data-initial-data'])
   if elm == None:
     return None
+  elif elm['userDetails']['userDetails']['user'] == None:
+    return None
   else:
+    #print(elm)
     userinfo = {}
     userinfo['followerCount'] = elm['userDetails']['userDetails']['user']['followerCount']
     userinfo['followeeCount'] = elm['userDetails']['userDetails']['user']['followeeCount']
@@ -137,7 +140,11 @@ def getmovinfo(video_id, API_KEY=''):
             movinfo['tags'] = []
             for i in tags:
                 movinfo['tags'].append(i.text)
-            movinfo['subscriberCount'] = getuserinfo(movinfo['user_id'])['followerCount']
+            userinfo = getuserinfo(movinfo['user_id'])
+            if userinfo == None:
+              return None
+            else:
+              movinfo['subscriberCount'] = userinfo['followerCount']
             return movinfo
         else:
             return None
@@ -295,13 +302,14 @@ def create_video_list(platform, list_len=385, itr_max=1000, API_KEY='', waittime
         if movlist == [] or movlist == None:
           continue
         print(movlist)
-        mov_id = np.random.choice(movlist)
-        movinfo = save_view_data(mov_id, API_KEY)
-        if movinfo != None and mov_id not in id_list:
-          id_list.append(mov_id)
-        itr -= 1
-        print("No.{0}:{1}を調査対象に追加しました".format(1000 - itr, mov_id))
-        time.sleep(waittime)
+        #mov_id = np.random.choice(movlist)
+        for mov_id in movlist:
+          movinfo = save_view_data(mov_id, API_KEY)
+          if movinfo != None and mov_id not in id_list:
+            id_list.append(mov_id)
+          itr -= 1
+          print("No.{0}:{1}を調査対象に追加しました".format(1000 - itr, mov_id))
+          time.sleep(waittime)
     return id_list
   else:
     return None
@@ -338,6 +346,6 @@ def display_data():
   plt.show()
 
 #INPUT_API_KEY = input('API KEYを入力→')
-#create_video_list('youtube', list_len=100, API_KEY=INPUT_API_KEY)
-create_video_list('niconico', list_len=100)
+#create_video_list('youtube', list_len=10000, API_KEY=INPUT_API_KEY)
+create_video_list('niconico', list_len=10000)
 #print(getmovinfo('sm9'))
