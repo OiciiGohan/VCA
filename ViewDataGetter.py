@@ -326,7 +326,7 @@ def renew_view_data(waittime=2, API_KEY=''):
     print(time.time(), "ファイルを更新しました")
     time.sleep(3600)
 
-#データを表示
+#データを表示_折れ線グラフ
 def display_data():
   file_list = os.listdir("./view_data")
   data_plt = []
@@ -345,7 +345,30 @@ def display_data():
   #plt.legend(data_plt, file_list, loc=4)
   plt.show()
 
+def display_data_scatter():
+  file_list = os.listdir("./view_data")
+  x = []
+  y = []
+  for data_file in file_list:
+    with open('view_data/{}'.format(data_file), mode='r', encoding='utf-8') as f:
+      data = json.load(f)
+    temp_x = []
+    temp_y = []
+    for i in range(len(data['view_data'])):
+      temp_x.append(data['view_data'][i][0])
+      temp_y.append(data['view_data'][i][1])
+    x.extend(temp_x)
+    y.extend(temp_y)
+  plt.scatter(x,y,s=1)
+  plt.xlabel("elapsed time[h]")
+  plt.ylabel("view")
+  #plt.yscale("log")
+  #plt.legend(data_plt, file_list, loc=4)
+  plt.show()
+
+
 #INPUT_API_KEY = input('API KEYを入力→')
 #create_video_list('youtube', list_len=10000, API_KEY=INPUT_API_KEY)
-create_video_list('niconico', list_len=10000)
+#create_video_list('niconico', list_len=10000)
 #print(getmovinfo('sm9'))
+#display_data_scatter()
