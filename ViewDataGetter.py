@@ -14,6 +14,8 @@ import os
 import time
 import requests, bs4 #ニコニコでユーザー情報を取得するのに必要。YouTubeのランキングサイトから動画IDを取得するのにも必要。
 from apiclient.discovery import build   #YouTubeAPI使うのに必要
+from pytz import timezone, utc
+from tzlocal import get_localzone
 
 def check_platform(video_id): #video_idからプラットフォームを自動で判定する
     if video_id[2:].isdecimal():
@@ -217,8 +219,10 @@ def calc_elapsed_time(movinfo):   #投稿からの経過時間[h]を測定
     e_time = dt_delta.days * 24 + int(dt_delta.seconds / 3600)
     return e_time
   elif platform == 'youtube':
+    ja = get_localzone()
     date_str = movinfo['first_retrieve']
-    date_dt = datetime.datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%S%z')
+    date_dt = datetime.datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%SZ')
+    date_dt = datetime.datetime(date_dt.year, date_dt.month, date_dt.day, date_dt.hour, date_dt.minute, date_dt.second, tzinfo=ja)
     JST = datetime.timezone(datetime.timedelta(hours=+9), 'JST')
     dt_now = datetime.datetime.now(JST)
     dt_delta = dt_now - date_dt
@@ -239,7 +243,7 @@ def date_to_weekday_hour(movinfo):
     return weekday_time
   elif platform == 'youtube':
     date_str = movinfo['first_retrieve']
-    date_dt = datetime.datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%S%z')
+    date_dt = datetime.datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%SZ')
     weekday_time['weekday'] = date_dt.strftime('%a')
     weekday_time['hour'] = int(date_dt.strftime('%H')) + int(date_dt.strftime('%M'))/60 + int(date_dt.strftime('%S'))/3600
     return weekday_time
@@ -379,9 +383,8 @@ def set_training_test():
       print("動画{}に学習時の役割を設定しました。".format(file_name))
 
 
-#INPUT_API_KEY = input('API KEYを入力→')
-#create_video_list('youtube', list_len=10000, API_KEY=INPUT_API_KEY)
-#create_video_list('niconico', list_len=10000)
-#print(getmovinfo('sm9'))
+INPUT_API_KEY = input('API KEYを入力→')
+create_video_list('youtube', list_len=10000, API_KEY=INPUT_API_KEY)
+create_video_list('niconico', list_len=10000)
 #display_data_scatter()
-set_training_test()
+#set_training_test()
