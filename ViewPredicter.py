@@ -1,3 +1,4 @@
+#from keras.backend.cntk_backend import ones_like
 import ViewDataGetter
 from keras.layers import Input, Dense
 from keras.models import Model
@@ -18,6 +19,8 @@ def read_view_data(path):
     file_list = os.listdir(path)
     train_x = []
     train_y = []
+    test_x = []
+    test_y = []
     for i in tqdm(range(len(file_list))):
         data_file = file_list[i]
         temp_x = []
@@ -33,11 +36,15 @@ def read_view_data(path):
         temp_x.extend(genre_convertor(data['genre']))   #x[3]...動画のジャンル
         for i in data['view_data']:
             add_x.extend(temp_x)
-            add_x.append(float(i[0]))                   #x[-1]...動画の投稿からの経過時間 [h]
-            train_x.append(add_x)
-            train_y.append(float(i[1]))
+            add_x.append(float(i[0]))                   #x[4]...動画の投稿からの経過時間 [h]
+            if data['training-test'] == 'training':
+                train_x.append(add_x)
+                train_y.append(float(i[1]))
+            if data['training-test'] == 'test':
+                test_x.append(add_x)
+                test_y.append(float(i[1]))
             #print(train_x)
-    return train_x, train_y
+    return train_x, train_y, test_x, test_y
 
 def genre_convertor(genre):
     num = 0
@@ -104,22 +111,39 @@ def training_nnw(x_train, y_train, nnw_path, hidden_shape, epochs):
     model.compile(loss='mean_squared_error', optimizer='adam')
     model.fit(x_train, y_train, epochs=epochs, validation_split=0.2)
     model.save(nnw_path + "/nnw_{0}_{1}.h5".format(temp_str, epochs))
+    return model
     
 def training_ridge(x_train, y_train, path):
     model = Ridge()
     model.fit(x_train, y_train)
     pickle.dump(model, open(path + "/ridge.pickle", 'wb'))
     print('Training set score: {:.2f}'.format(model.score(x_train, y_train)))
+    return model
 
+method = 'ridge'
 print("reading view data files...")
-x_train, y_train = read_view_data("./view_data")
+x_train, y_train, x_test, y_test = read_view_data("./view_data")
 x_train = np.array(x_train)
-print(x_train.shape)
-start_time = time.time()
-#training_nnw(x_train, y_train, './nnw', [100, 200], 1000)
-training_ridge(x_train, y_train, './nnw')
-elapsed_time = time.time() - start_time
-print ("elapsed_time:{0}".format(elapsed_time) + "[sec]")
+x_test = np.array(x_test)
+
+if method == 'nnw':
+    train_start_time = time.time()
+    model = training_nnw(x_train, y_train, './nnw', [20,100], 1000)
+    train_elapsed_time = time.time() - train_start_time
+    print ("train_elapsed_time:{0}".format(train_elapsed_time) + "[sec]")
+    print(x_train.shape)
+    predicted_y = np.sign(model.predict(x_test).flatten())
+    accuracy = np.average(1 - (np.abs(predicted_y - y_test) / (y_test + np.ones_like(y_test) * 1.0e-4))) #再生数0のデータがある場合用に＋1.0e-4してる
+elif method == 'ridge':
+    train_start_time = time.time()
+    model = training_ridge(x_train, y_train, './nnw')
+    train_elapsed_time = time.time() - train_start_time
+    print ("train_elapsed_time:{0}".format(train_elapsed_time) + "[sec]")
+    print(x_train.shape)
+    accuracy = model.score(x_test, y_test)
+
+print("accuracy: {}%".format(accuracy*100))
+
 
 #画像を利用しない場合について、いずれも3968個のデータを学習しました
 #h5ファイル名の命名方式は「nnw_（中間層の形状）_（epocs）」
@@ -130,3 +154,9 @@ print ("elapsed_time:{0}".format(elapsed_time) + "[sec]")
 #nnw_100-20_1000    loss: 12767256423.8236 - val_loss: 32182394812.9673     elapsed_time:127.77350997924805[sec]
 #nnw_100-50_1000    loss: 12659814522.2735 - val_loss: 31990913907.2242     elapsed_time:134.84311175346375[sec]
 #nnw_100-200_1000   loss: 12278648424.7662 - val_loss: 31256658851.4660     elapsed_time:149.06830954551697[sec]    この辺から自分のPCだと悲鳴上げ始める
+
+#画像を利用しない場合について、いずれも2991個のデータを学習しました
+#nnw_20_1000        loss: 12768680684.1185 - val_loss: 32185176452.9270     train_elapsed_time:55.3294038772583[sec]
+#                   accuracy: 1.2442944891948617%
+#nnw_20-100_1000    Training set score: 0.49                                train_elapsed_time:0.009885072708129883[sec]
+#                   accuracy: -27.705643397654246%
