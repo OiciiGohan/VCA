@@ -108,8 +108,7 @@ def training_nnw(x_train, y_train, nnw_path, hidden_shape, epochs):
 def training_ridge(x_train, y_train, path):
     model = Ridge()
     model.fit(x_train, y_train)
-    #model.save(path + "/ridge.h5")
-    pickle.dump(model, open(path + "/ridge.h5", 'wb'))
+    pickle.dump(model, open(path + "/ridge.pickle", 'wb'))
     print('Training set score: {:.2f}'.format(model.score(x_train, y_train)))
 
 print("reading view data files...")
