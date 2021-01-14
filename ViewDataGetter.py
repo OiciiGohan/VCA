@@ -268,6 +268,7 @@ def save_view_data(video_id, API_KEY=''):
       data['first_retrieve'] = movinfo['first_retrieve']
       data['first_retrieve_weekday'] = date_to_weekday_hour(movinfo)['weekday']
       data['first_retrieve_hour'] = date_to_weekday_hour(movinfo)['hour']
+      data['training-test'] = np.random.choice(["training", "test"], p=[0.75, 0.25])
       #data['comment_num'] = movinfo['comment_num']
       #data['mylist_counter'] = movinfo['mylist_counter']
       data['view_data'] = []
@@ -366,9 +367,21 @@ def display_data_scatter():
   #plt.legend(data_plt, file_list, loc=4)
   plt.show()
 
+def set_training_test():
+  file_list = os.listdir("./view_data")
+  for file_name in file_list:
+    with open('./view_data/{}'.format(file_name), mode='r', encoding='utf-8') as fr:
+      data = json.load(fr)
+    if 'training-test' not in data:
+      data['training-test'] = np.random.choice(["training", "test"], p=[0.75, 0.25])
+      with open('./view_data/{}'.format(file_name), mode='w', encoding='utf-8') as fw:
+        json.dump(data, fw, ensure_ascii=False, indent=4)
+      print("動画{}に学習時の役割を設定しました。".format(file_name))
+
 
 #INPUT_API_KEY = input('API KEYを入力→')
 #create_video_list('youtube', list_len=10000, API_KEY=INPUT_API_KEY)
 #create_video_list('niconico', list_len=10000)
 #print(getmovinfo('sm9'))
 #display_data_scatter()
+set_training_test()
