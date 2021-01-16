@@ -13,7 +13,7 @@ import json
 import os
 import time
 import requests, bs4 #ニコニコでユーザー情報を取得するのに必要。YouTubeのランキングサイトから動画IDを取得するのにも必要。
-from apiclient.discovery import build   #YouTubeAPI使うのに必要
+from googleapiclient.discovery import build   #YouTubeAPI使うのに必要 install する時は　conda install -c conda-forge google-api-python-client
 from pytz import timezone, utc
 from tzlocal import get_localzone
 
@@ -382,9 +382,24 @@ def set_training_test():
         json.dump(data, fw, ensure_ascii=False, indent=4)
       print("動画{}に学習時の役割を設定しました。".format(file_name))
 
+def set_upload_time():
+  file_list = os.listdir("./view_data")
+  for file_name in file_list:
+    with open('./view_data/{}'.format(file_name), mode='r', encoding='utf-8') as fr:
+      data = json.load(fr)
+    if 'first_retrieve_weekday' not in data:
+      data['first_retrieve_weekday'] = date_to_weekday_hour(data)['weekday']
+      data['first_retrieve_hour'] = date_to_weekday_hour(data)['hour']
+      with open('./view_data/{}'.format(file_name), mode='w', encoding='utf-8') as fw:
+        json.dump(data, fw, ensure_ascii=False, indent=4)
+      print("動画{}に投稿日付情報を設定しました。".format(file_name))
+    else:
+      print("動画{}には既に投稿日付情報があります".format(file_name))
 
-INPUT_API_KEY = input('API KEYを入力→')
-create_video_list('youtube', list_len=10000, API_KEY=INPUT_API_KEY)
+
+#INPUT_API_KEY = input('API KEYを入力→')
+#create_video_list('youtube', list_len=10000, API_KEY=INPUT_API_KEY)
 create_video_list('niconico', list_len=10000)
 #display_data_scatter()
 #set_training_test()
+#set_upload_time()
