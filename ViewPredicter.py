@@ -1,6 +1,7 @@
 #from keras.backend.cntk_backend import ones_like
+from keras.engine import network
 import ViewDataGetter
-from keras.layers import Input, Dense
+from keras.layers import Input, Dense, Flatten
 from keras.models import Model
 from sklearn.linear_model import Ridge
 import numpy as np
@@ -9,42 +10,91 @@ import json
 from tqdm import tqdm
 import time
 import pickle
+from PIL import Image
+from keras.applications.inception_resnet_v2 import InceptionResNetV2
+from keras.applications.mobilenet_v2 import MobileNetV2
 
 def str2int(x):
     if type(x) == 'string':
         x = int(x)
     return x
 
-def read_view_data(path):
-    file_list = os.listdir(path)
+def resize_image(orig_img, width, height, method): #methodは'squash'、'center_crop'、'black_border'の３つ。
+    if method == 'squash':
+        resized_img = orig_img.resize((width, height))
+    elif method == 'center_crop':
+        if orig_img.width >= orig_img.height:
+            resized_width = int(orig_img.width * (height / orig_img.height))
+            resized_img = orig_img.resize((resized_width, height))
+            center_x = int(resized_img.width / 2)
+            center_y = int(resized_img.height / 2)
+            resized_img = resized_img.crop((center_x - width / 2, center_y - height / 2, 
+                                            center_x + width / 2, center_y + height / 2))
+            resized_img = resized_img.resize((width, height))
+        else:
+            resized_height = int(orig_img.height * (width / orig_img.width))
+            resized_img = orig_img.resize((width, resized_height))
+            center_x = int(resized_img.width / 2)
+            center_y = int(resized_img.height / 2)
+            resized_img = resized_img.crop((center_x - width / 2, center_y - height / 2, 
+                                            center_x + width / 2, center_y + height / 2))
+            resized_img = resized_img.resize((width, height))
+    elif method == 'black_border':
+        if orig_img.width >= orig_img.height:
+            resized_height = int(orig_img.height * (width / orig_img.width))
+            resized_img = orig_img.resize((width, resized_height))
+            center_x = int(resized_img.width / 2)
+            center_y = int(resized_img.height / 2)
+            resized_img = resized_img.crop((center_x - width / 2, center_y - height / 2, 
+                                            center_x + width / 2, center_y + height / 2))
+            resized_img = resized_img.resize((width, height))
+        else:
+            resized_width = int(orig_img.width * (height / orig_img.height))
+            resized_img = orig_img.resize((resized_width, height))
+            center_x = int(resized_img.width / 2)
+            center_y = int(resized_img.height / 2)
+            resized_img = resized_img.crop((center_x - width / 2, center_y - height / 2, 
+                                            center_x + width / 2, center_y + height / 2))
+            resized_img = resized_img.resize((width, height))
+    else:
+        return 0
+    imgArray = np.asarray(resized_img)
+    return imgArray
+
+def read_view_data(meta_path):
+    file_list = os.listdir(meta_path)
     train_x = []
     train_y = []
     test_x = []
     test_y = []
+    train_file_name = []
+    test_file_name = []
     for i in tqdm(range(len(file_list))):
         data_file = file_list[i]
         temp_x = []
         add_x = []
-        with open(path + '/{}'.format(data_file), mode='r', encoding='utf-8') as f:
+        with open(meta_path + '/{}'.format(data_file), mode='r', encoding='utf-8') as f:
             data = json.load(f)
         platform = 0
         if ViewDataGetter.check_platform(data['video_id']) == 'niconico':
             platform = 1
-        temp_x.append(float(platform))                         #x[0]...Platform; YouTUbeなら0, ニコ動なら1
-        temp_x.append(float(str2int(data['subscriberCount'])))          #x[1]...チャンネル登録者数、あるいはフォロワー数
-        temp_x.append(float(data['length']))                   #x[2]...動画の長さ [s]
-        temp_x.extend(genre_convertor(data['genre']))   #x[3]...動画のジャンル
+        temp_x.append(float(platform))                          #x[0]...Platform; YouTUbeなら0, ニコ動なら1
+        temp_x.append(float(str2int(data['subscriberCount'])))  #x[1]...チャンネル登録者数、あるいはフォロワー数
+        temp_x.append(float(data['length']))                    #x[2]...動画の長さ [s]
+        temp_x.extend(genre_convertor(data['genre']))           #x[3]...動画のジャンル
         for i in data['view_data']:
             add_x.extend(temp_x)
-            add_x.append(float(i[0]))                   #x[4]...動画の投稿からの経過時間 [h]
+            add_x.append(np.math.log(float(i[0]) + 1.0e-4))     #x[4]...動画の投稿からの経過時間 [h] を対数変換したもの
             if data['training-test'] == 'training':
                 train_x.append(add_x)
                 train_y.append(float(i[1]))
+                train_file_name.append(data['video_id'])
             if data['training-test'] == 'test':
                 test_x.append(add_x)
                 test_y.append(float(i[1]))
+                test_file_name.append(data['video_id'])
             #print(train_x)
-    return train_x, train_y, test_x, test_y
+    return train_x, train_y, test_x, test_y, train_file_name, test_file_name
 
 def genre_convertor(genre):
     num = 0
@@ -96,6 +146,52 @@ def genre_convertor(genre):
     arr[num-1] = 1.0
     return arr
 
+
+def image_data_convert(file_list, network, resize_method):
+    output_features = []
+    if network == 'inception_resnet_v2':
+        img_list = []
+        for img_file in file_list:
+            orig_img = Image.open('./thumbnails/' + img_file + '.jpg')
+            resized_img = resize_image(orig_img, 299, 299, resize_method)
+            img_list.append(resized_img)
+        img_list = np.array(img_list)
+
+        inputs = Input(shape=(299, 299, 3))
+        model = InceptionResNetV2(include_top=False, weights='imagenet', input_tensor=inputs)
+        output_features = model.predict(img_list)
+    elif network == 'mobilenet_v2':
+        img_list = []
+        for img_file in file_list:
+            orig_img = Image.open('./thumbnails/' + img_file + '.jpg')
+            resized_img = resize_image(orig_img, 224, 224, resize_method)
+            img_list.append(resized_img)
+        img_list = np.array(img_list)
+        
+        inputs = Input(shape=(224, 224, 3))
+        model = MobileNetV2(include_top=False, weights='imagenet', input_tensor=inputs)
+        output_features = model.predict(img_list)
+    else:
+        return None
+    final_out = []
+    for i in range(len(output_features)):
+        final_out.append(output_features[i].flatten())
+    final_out = np.array(final_out)
+    return final_out
+
+def connect_two_x(x1, x2):
+    if len(x1) != len(x2):
+        print('エラー：結合するデータのサンプル数が違います。(x1:{}, x2:{})'.format(x1.shape, x2.shape))
+        return None
+    else:
+        x = []
+        for i in range(len(x1)):
+            add_x = x1[i].tolist()
+            add_x.extend(x2[i].tolist())
+            x.append(add_x)
+        x = np.array(x)
+        return x
+
 def training_nnw(x_train, y_train, nnw_path, hidden_shape, epochs):
     inputs = Input(shape=(len(x_train[0]),))
     hidden = [inputs]
@@ -110,39 +206,56 @@ def training_nnw(x_train, y_train, nnw_path, hidden_shape, epochs):
     model = Model(inputs=inputs, outputs=predictions)
     model.compile(loss='mean_squared_error', optimizer='adam')
     model.fit(x_train, y_train, epochs=epochs, validation_split=0.2)
-    model.save(nnw_path + "/nnw_{0}_{1}.h5".format(temp_str, epochs))
+    model.save(nnw_path + "/nnw_{0}_{1}_{2}.h5".format(temp_str, epochs, len(x_train)))
     return model
     
 def training_ridge(x_train, y_train, path):
     model = Ridge()
     model.fit(x_train, y_train)
-    pickle.dump(model, open(path + "/ridge.pickle", 'wb'))
+    pickle.dump(model, open(path + "/ridge_{}.pickle".format(len(x_train)), 'wb'))
     print('Training set score: {:.2f}'.format(model.score(x_train, y_train)))
     return model
 
+
+#######################################################################################################################################
+
 method = 'ridge'
+input_images = True
+network_type = 'inception_resnet_v2'
+resize_method = 'squash'
 print("reading view data files...")
-x_train, y_train, x_test, y_test = read_view_data("./view_data")
+x_train, y_train, x_test, y_test, train_file_name, test_file_name = read_view_data("./view_data")
 x_train = np.array(x_train)
 x_test = np.array(x_test)
 
+
+train_start_time = time.time()
+if input_images:
+    x_train_image = image_data_convert(train_file_name, network_type, resize_method)
+    x_test_image = image_data_convert(test_file_name, network_type, resize_method)
+    x_train = connect_two_x(x_train_image, x_train)
+    x_test = connect_two_x(x_test_image, x_test)
+
 if method == 'nnw':
-    train_start_time = time.time()
-    model = training_nnw(x_train, y_train, './nnw', [20,100], 1000)
+    model = training_nnw(x_train, y_train, './nnw', [100,200], 10000)
     train_elapsed_time = time.time() - train_start_time
     print ("train_elapsed_time:{0}".format(train_elapsed_time) + "[sec]")
     print(x_train.shape)
     predicted_y = np.sign(model.predict(x_test).flatten())
     accuracy = np.average(1 - (np.abs(predicted_y - y_test) / (y_test + np.ones_like(y_test) * 1.0e-4))) #再生数0のデータがある場合用に＋1.0e-4してる
 elif method == 'ridge':
-    train_start_time = time.time()
     model = training_ridge(x_train, y_train, './nnw')
     train_elapsed_time = time.time() - train_start_time
     print ("train_elapsed_time:{0}".format(train_elapsed_time) + "[sec]")
     print(x_train.shape)
     accuracy = model.score(x_test, y_test)
 
-print("accuracy: {}%".format(accuracy*100))
+print("{0} test datas, accuracy: {1}%".format(len(y_test), accuracy*100))
+
+
+#画像を利用した場合について、いずれも6053個のデータを学習しました
+#ridge              Training set score: 1.00                                train_elapsed_time:3011.1190416812897[sec]
+#                   accuracy: -243.46332117854513%     過学習を起こしている？
 
 
 #画像を利用しない場合について、いずれも3968個のデータを学習しました
@@ -160,3 +273,11 @@ print("accuracy: {}%".format(accuracy*100))
 #                   accuracy: 1.2442944891948617%
 #nnw_20-100_1000    Training set score: 0.49                                train_elapsed_time:0.009885072708129883[sec]
 #                   accuracy: -27.705643397654246%
+
+#画像を利用しない場合について、いずれも5108個のデータを学習しました
+#nnw_20-100_1000    loss: 465244931431.6593 - val_loss: 272587328129.1898   train_elapsed_time:104.38139843940735[sec]
+#                   accuracy: 0.9145298251495351%
+#nnw_100-200_10000  loss: 462941862603.7474 - val_loss: 269157541739.7104   train_elapsed_time:1255.6063091754913[sec]
+#                   accuracy: 0.9223404272055331%
+#ridge              Training set score: 0.17                                train_elapsed_time:0.010005712509155273[sec]
+#                   accuracy: 11.25709495327989%
