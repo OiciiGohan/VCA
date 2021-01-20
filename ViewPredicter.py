@@ -148,6 +148,7 @@ def genre_convertor(genre):
 
 
 def image_data_convert(file_list, network, resize_method):
+    print('画像から特徴量を抽出中…')
     output_features = []
     if network == 'inception_resnet_v2':
         img_list = []
@@ -220,10 +221,12 @@ def training_ridge(x_train, y_train, path):
 #######################################################################################################################################
 
 method = 'ridge'
+nnw_shape = [100,200]
+nnw_epochs = 1000
 input_images = True
 network_type = 'inception_resnet_v2'
-resize_method = 'squash'
-print("reading view data files...")
+resize_method = 'black_border'            #'squash'、'center_crop'、'black_border'の３つ。
+print("メタデータを読み込み中...")
 x_train, y_train, x_test, y_test, train_file_name, test_file_name = read_view_data("./view_data")
 x_train = np.array(x_train)
 x_test = np.array(x_test)
@@ -232,52 +235,64 @@ x_test = np.array(x_test)
 train_start_time = time.time()
 if input_images:
     x_train_image = image_data_convert(train_file_name, network_type, resize_method)
-    x_test_image = image_data_convert(test_file_name, network_type, resize_method)
     x_train = connect_two_x(x_train_image, x_train)
-    x_test = connect_two_x(x_test_image, x_test)
 
 if method == 'nnw':
-    model = training_nnw(x_train, y_train, './nnw', [100,200], 10000)
+    model = training_nnw(x_train, y_train, './nnw', nnw_shape, nnw_epochs)
     train_elapsed_time = time.time() - train_start_time
+    print("{0} training data, {1}, {2}, {3}, {4}, {5}, {6}".format(len(y_train), nnw_shape, nnw_epochs, 
+                                                                   method, input_images, network_type, resize_method))
     print ("train_elapsed_time:{0}".format(train_elapsed_time) + "[sec]")
-    print(x_train.shape)
+    test_start_time = time.time()
+    if input_images:
+        x_test_image = image_data_convert(test_file_name, network_type, resize_method)
+        x_test = connect_two_x(x_test_image, x_test)
     predicted_y = np.sign(model.predict(x_test).flatten())
+    test_elapsed_time = time.time() - test_start_time
     accuracy = np.average(1 - (np.abs(predicted_y - y_test) / (y_test + np.ones_like(y_test) * 1.0e-4))) #再生数0のデータがある場合用に＋1.0e-4してる
 elif method == 'ridge':
     model = training_ridge(x_train, y_train, './nnw')
     train_elapsed_time = time.time() - train_start_time
+    print("{0} training data, {1}, {2}, {3}, {4}".format(len(y_train), method, input_images, network_type, resize_method))
     print ("train_elapsed_time:{0}".format(train_elapsed_time) + "[sec]")
-    print(x_train.shape)
+    test_start_time = time.time()
+    if input_images:
+        x_test_image = image_data_convert(test_file_name, network_type, resize_method)
+        x_test = connect_two_x(x_test_image, x_test)
+    test_elapsed_time = time.time() - test_start_time
     accuracy = model.score(x_test, y_test)
 
-print("{0} test datas, accuracy: {1}%".format(len(y_test), accuracy*100))
+print("{0} test data, accuracy: {1}%, test_elapsed_time:{2}[sec]".format(len(y_test), accuracy*100, test_elapsed_time))
 
 
-#画像を利用した場合について、いずれも6053個のデータを学習しました
-#ridge              Training set score: 1.00                                train_elapsed_time:3011.1190416812897[sec]
-#                   accuracy: -243.46332117854513%     過学習を起こしている？
+#############################################################################################################################
+#違う動画から抽出されたサムネイル画像x1とメタデータx2の組み合わせを入力として再生数yを予測することを学習しまくる
+# -> 同じ動画から抽出されたフレーム画像x1'とメタデータx2'の組み合わせで最も予測される再生数y'が大きくなるものを提示する
+#x2とx2'の違いはx2は対応するx1ごとに異なる値を示すのに対して、x2'は対応するx1'に関わらず一定の値を取る点。
+#プレゼンする時は大文字小文字で要素と集合を区別した方がいいかも
 
+#全結合層を省いているため、学習済みNNWが物体認識機として用いられているとは限らない。あくまでも次元数を減らした特徴量を算出しているだけ。
+#学習済みNNWは更なる学習を行わない。(転移学習のみを行い、ファインチューニングをしない)
 
-#画像を利用しない場合について、いずれも3968個のデータを学習しました
-#h5ファイル名の命名方式は「nnw_（中間層の形状）_（epocs）」
-#h5ファイル名        損失                                                    処理時間
-#nnw_20_1000        loss: 12768680684.1185 - val_loss: 32185176452.9270     elapsed_time:117.65584588050842[sec]
-#nnw_50_1000        loss: 12662833572.2647 - val_loss: 31995449925.4408     elapsed_time:116.43776965141296[sec]
-#nnw_100_1000       loss: 12514898714.8028 - val_loss: 31719183672.1814     elapsed_time:120.1673800945282[sec]
-#nnw_100-20_1000    loss: 12767256423.8236 - val_loss: 32182394812.9673     elapsed_time:127.77350997924805[sec]
-#nnw_100-50_1000    loss: 12659814522.2735 - val_loss: 31990913907.2242     elapsed_time:134.84311175346375[sec]
-#nnw_100-200_1000   loss: 12278648424.7662 - val_loss: 31256658851.4660     elapsed_time:149.06830954551697[sec]    この辺から自分のPCだと悲鳴上げ始める
+#今回はCPUで動作。プロセッサはIntel Core i7-9750H CPU(2.60GHz)、メモリは16.0GB
 
-#画像を利用しない場合について、いずれも2991個のデータを学習しました
-#nnw_20_1000        loss: 12768680684.1185 - val_loss: 32185176452.9270     train_elapsed_time:55.3294038772583[sec]
-#                   accuracy: 1.2442944891948617%
-#nnw_20-100_1000    Training set score: 0.49                                train_elapsed_time:0.009885072708129883[sec]
-#                   accuracy: -27.705643397654246%
+#6053 training data, ridge, True, inception_resnet_v2, squash
+#経過時間のみ対数表現。
+#Training set score: 1.00   train_elapsed_time:2002.9710412025452[sec](約33分)
+#1985 test data, accuracy: -243.46332117854513%, test_elapsed_time:685.3839712142944[sec](約11分) <- ここがユーザーが使う時に掛かる時間の指標になる
+#精度が低すぎてマイナスになっている。
+#30fpsと考えると動画1秒あたり処理時間は10秒くらいかかるので、10分の動画からサムネイルを提示するのにはだいたい100分、つまり1時間40分程度かかる
+# -> 実際には動画からフレーム画像群を抽出するプロセスがあるので、もっと掛かる。
+#Training set scoreが1.00なのが気になる。リッジ回帰なのにも関わらず過学習を起こしている気がする。
 
-#画像を利用しない場合について、いずれも5108個のデータを学習しました
-#nnw_20-100_1000    loss: 465244931431.6593 - val_loss: 272587328129.1898   train_elapsed_time:104.38139843940735[sec]
-#                   accuracy: 0.9145298251495351%
-#nnw_100-200_10000  loss: 462941862603.7474 - val_loss: 269157541739.7104   train_elapsed_time:1255.6063091754913[sec]
-#                   accuracy: 0.9223404272055331%
-#ridge              Training set score: 0.17                                train_elapsed_time:0.010005712509155273[sec]
-#                   accuracy: 11.25709495327989%
+#6053 training data, ridge, True, inception_resnet_v2, center_crop
+#経過時間のみ対数表現。
+#Training set score: 1.00   train_elapsed_time:1990.783311843872[sec](約33分)
+#1985 test data, accuracy: -354.07527693439766%, test_elapsed_time:534.0969743728638[sec](約9分)
+#精度が低すぎてマイナスになっている。
+
+#inception_resnet_v2の全結合層の１つ前の出力の形式は8(width)×8(height)×1536(channel)で、
+#   今回はこれをFlattenして98304次元のベクトルに落とし込んでいる。精度が低い原因として画像側の次元がまだ十分に減らせておらず、
+#       実際には再生数に大きく寄与しているはずの（分からないけど）メタデータがほとんど学習に用いられていないことが原因になっていないか。
+#   -> もしかしたらmobilnet_v2の方がうまくいくかもしれない(こっちは(38400) <- (5, 5, 1536))
+# (10, 98304) <- (10, 8, 8, 1536)
