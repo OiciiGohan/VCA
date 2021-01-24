@@ -279,10 +279,22 @@ def save_view_data(video_id, API_KEY=''):
   e_time = calc_elapsed_time(movinfo)
   view_counter = int(movinfo['view_counter'])
   data['view_data'].append([e_time, view_counter])
+  elap_time_list = []
+  delete_list = []
+  for i in range(len(data['view_data'])):
+        if data['view_data'][i][0] in elap_time_list:
+              delete_list.append(data['view_data'][i])
+        else:
+              elap_time_list.append(data['view_data'][i][0])
+  for delete_data in delete_list:
+        data['view_data'].remove(delete_data)
+        print("動画{}の重複再生数情報を統一中".format(data['video_id']))
+  
+  
   with open('view_data/{}.json'.format(video_id), mode='w', encoding='utf-8') as f:
     json.dump(data, f, ensure_ascii=None, indent=4)
 
-def create_video_list(platform, list_len=385, itr_max=1000, API_KEY='', waittime=10): #platformをyoutubeに設定したら必ずAPIを記入すること。
+def create_video_list(platform, list_len=385, itr_max=1000, API_KEY='', waittime=5): #platformをyoutubeに設定したら必ずAPIを記入すること。
   if platform == 'niconico':
     number_list = []
     id_list = []
@@ -319,7 +331,7 @@ def create_video_list(platform, list_len=385, itr_max=1000, API_KEY='', waittime
   else:
     return None
 
-def renew_view_data(waittime=2, API_KEY=''):
+def renew_view_data(waittime=5, API_KEY=''):
   video_list = []
   file_list = os.listdir("./view_data")
   for file_name in file_list:
@@ -328,6 +340,7 @@ def renew_view_data(waittime=2, API_KEY=''):
     for video_id in video_list:
       save_view_data(video_id, API_KEY)
       time.sleep(waittime)
+      print("動画ID:{}のメタデータファイルを更新しました".format(video_id))
     print(time.time(), "ファイルを更新しました")
     time.sleep(3600)
 
@@ -397,9 +410,10 @@ def set_upload_time():
       print("動画{}には既に投稿日付情報があります".format(file_name))
 
 
-#INPUT_API_KEY = input('API KEYを入力→')
+INPUT_API_KEY = input('API KEYを入力→')
+renew_view_data(5, INPUT_API_KEY)
 #create_video_list('youtube', list_len=10000, API_KEY=INPUT_API_KEY)
-create_video_list('niconico', list_len=10000)
+#create_video_list('niconico', list_len=10000)
 #display_data_scatter()
 #set_training_test()
 #set_upload_time()
