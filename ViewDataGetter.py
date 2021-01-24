@@ -174,6 +174,8 @@ def getmovinfo(video_id, API_KEY=''):
             movinfo['user_id'] = resinfo[0]['snippet']['channelId']
             movinfo['user_nickname'] = resinfo[0]['snippet']['channelTitle']
             movinfo['first_retrieve'] = resinfo[0]['snippet']['publishedAt']
+            if 'viewCount' not in resinfo[0]['statistics']:
+                  return None
             movinfo['view_counter'] = resinfo[0]['statistics']['viewCount']
             movinfo['comment_num'] = None
             movinfo['mylist_counter'] = None
@@ -250,7 +252,7 @@ def date_to_weekday_hour(movinfo):
   else:
     return None
 
-def save_view_data(video_id, API_KEY=''):
+def save_view_data(video_id, API_KEY='', max_view_data_num=3):
   movinfo = getmovinfo(video_id, API_KEY)
   if movinfo == None:
     return None
@@ -278,7 +280,8 @@ def save_view_data(video_id, API_KEY=''):
       data['view_data'] = []
   e_time = calc_elapsed_time(movinfo)
   view_counter = int(movinfo['view_counter'])
-  data['view_data'].append([e_time, view_counter])
+  if len(data['view_data']) < max_view_data_num:
+    data['view_data'].append([e_time, view_counter])
   elap_time_list = []
   delete_list = []
   for i in range(len(data['view_data'])):
@@ -289,8 +292,6 @@ def save_view_data(video_id, API_KEY=''):
   for delete_data in delete_list:
         data['view_data'].remove(delete_data)
         print("動画{}の重複再生数情報を統一中".format(data['video_id']))
-  
-  
   with open('view_data/{}.json'.format(video_id), mode='w', encoding='utf-8') as f:
     json.dump(data, f, ensure_ascii=None, indent=4)
 
