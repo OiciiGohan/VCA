@@ -80,7 +80,7 @@ def unify_tag_str(tag_str):
     ZEN_eisuu = "".join(chr(0xff01 + i) for i in range(94))
     HAN_eisuu = "".join(chr(0x21 + i) for i in range(94))
     ZEN2HAN_eisuu = str.maketrans(ZEN_eisuu, HAN_eisuu)
-    tag_str = tag_str.translate(ZEN2HAN_eisuu)
+    tag_str = tag_str.translate(ZEN2HAN_eisuu).lower()
     #HAN2ZEN_eisuu = str.maketrans(HAN_eisuu, ZEN_eisuu)
     KANA_table = str.maketrans({'ア':'ｱ', 'イ':'ｲ', 'ウ':'ｳ', 'エ':'ｴ', 'オ':'ｵ', 'ヴ':'ｳﾞ', 
                   'カ':'ｶ', 'キ':'ｷ', 'ク':'ｸ', 'ケ':'ｹ', 'コ':'ｺ', 
@@ -96,7 +96,7 @@ def unify_tag_str(tag_str):
                   'マ':'ﾏ', 'ミ':'ﾐ', 'ム':'ﾑ', 'メ':'ﾒ', 'モ':'ﾓ', 
                   'ヤ':'ﾔ', 'ユ':'ﾕ', 'ヨ':'ﾖ',
                   'ラ':'ﾗ', 'リ':'ﾘ', 'ル':'ﾙ', 'レ':'ﾚ', 'ロ':'ﾛ', 
-                  'ワ':'ﾜ', 'ヲ':'ｦ', 'ン':'ﾝ', 
+                  'ワ':'ﾜ', 'ヲ':'ｦ', 'ン':'ﾝ', 'ー':'ｰ', 
                   'ァ':'ｧ', 'ィ':'ｨ', 'ゥ':'ｩ', 'ェ':'ｪ', 'ォ':'ｫ', 
                   'ャ':'ｬ', 'ュ':'ｭ', 'ョ':'ｮ', '゙':'ﾞ', '゛':'ﾞ', '゚':'ﾟ', '゜':'ﾟ'})
     tag_str = tag_str.translate(KANA_table)
@@ -121,6 +121,12 @@ def read_view_data(meta_path, use_genre=True):
     pd_test_x['elapsed_time'] = []
     tags_dict = {}
     pd_test_x['tag_index'] = []
+    pd_test_x['title'] = []
+    pd_test_x['first_retrieve'] = []
+    pd_test_x['user_id'] = []
+    pd_test_x['user_nickname'] = []
+    pd_test_x['first_retrieve'] = []
+    pd_test_x['view'] = []
     print('全体で使用されている各タグの頻度を計算しています...')
     for i in tqdm(range(len(file_list))):
         data_file = file_list[i]
@@ -172,12 +178,12 @@ def read_view_data(meta_path, use_genre=True):
                 pd_test_x['first_retrieve'].append(data['first_retrieve'])
                 pd_test_x['user_id'].append(data['user_id'])
                 pd_test_x['user_nickname'].append(data['user_nickname'])
-                pd_test_x['first_retrieve'].append(data['first_retrieve'])
                 pd_test_x['tag_index'].append(tags_index)
                 if use_genre:
                     pd_test_x['genre'].append(data['genre'])
                     pd_test_x['genre_num'].append(genre_convertor(data['genre']))
                 pd_test_x['elapsed_time'].append(j[0])
+                pd_test_x['view'].append(float(j[1]))
                 test_x.append(add_x)
                 test_y.append(float(j[1]))
                 test_file_name.append(data['video_id'])
@@ -427,7 +433,15 @@ def list_to_pandas(datalist):
 
 #######################################################################################################################################
 
-
+use_genre = False
+x_train, y_train, x_test, y_test, train_file_name, test_file_name, pd_test_x, tags_dict = read_view_data("./view_data", use_genre=use_genre)
+result = pd_test_x
+df = pd.DataFrame(result)
+df.head()
+df.to_csv('./results/{}.csv'.format(datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')))
+tags_dict = sorted(tags_dict.items(), key=lambda x:x[1], reverse=True)
+with open('./results/{}.json'.format(datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')), mode='w', encoding='utf-8') as f:
+    json.dump(tags_dict, f, ensure_ascii=False, indent=4)
 
 '''method = 'ridge'
 nnw_shape = [100,200]
@@ -438,7 +452,7 @@ resize_method = 'squash'            #'squash'、'center_crop'、'black_border'�
 use_genre = False
 
 print("メタデータを読み込み中...")
-x_train, y_train, x_test, y_test, train_file_name, test_file_name, pd_test_x = read_view_data("./view_data", use_genre=use_genre)
+x_train, y_train, x_test, y_test, train_file_name, test_file_name, pd_test_x, tags_dict = read_view_data("./view_data", use_genre=use_genre)
 x_train = np.array(x_train)
 x_test = np.array(x_test)
 train_feature_size = 0
@@ -490,6 +504,9 @@ result['predicted view value'] = (meta_predicted_y_test + predicted_delta_y).tol
 df = pd.DataFrame(result)
 df.head()
 df.to_csv('./results/{}.csv'.format(datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')))
+tags_dict = sorted(tags_dict.items(), key=lambda x:x[1], reverse=True)
+with open('./results/{}.json'.format(datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')), mode='w', encoding='utf-8') as f:
+    json.dump(tags_dict, f, ensure_ascii=False, indent=4)
 
 print("{0} test data, test_elapsed_time:{1}[sec]".format(len(y_test), test_elapsed_time))
 display_scatter_y(y_test, meta_predicted_y_test + predicted_delta_y)'''
