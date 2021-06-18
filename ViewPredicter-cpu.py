@@ -27,6 +27,8 @@ from keras.applications.mobilenet_v2 import MobileNetV2
 import matplotlib.pyplot as plt
 import datetime
 import pandas as pd
+from nsfw_detector import predict
+from saliency import saliency, average_saliency, in_out_saliency
 
 def str2int(x):
     if type(x) == 'string':
@@ -102,7 +104,12 @@ def unify_tag_str(tag_str):
     tag_str = tag_str.translate(KANA_table)
     return tag_str
 
-def read_view_data(meta_path, use_genre=True):
+def conv_log(x, avoid_zerodivision_index=1.0e-4):
+    x = np.math.log(x + avoid_zerodivision_index)
+    return x
+
+def read_view_data(meta_path, use_genre=True, use_platform=True, use_subscriberCount=True,
+                   use_length=True, use_elapsed_time=True, use_tag_index=True, permit_id_dupl=True):
     file_list = os.listdir(meta_path)
     train_x = []
     train_y = []
@@ -127,43 +134,54 @@ def read_view_data(meta_path, use_genre=True):
     pd_test_x['user_nickname'] = []
     pd_test_x['first_retrieve'] = []
     pd_test_x['view'] = []
-    print('全体で使用されている各タグの頻度を計算しています...')
-    for i in tqdm(range(len(file_list))):
-        data_file = file_list[i]
-        with open(meta_path + '/{}'.format(data_file), mode='r', encoding='utf-8') as f:
-            data = json.load(f)
-        if data['tags'] != None:
-            for tag in data['tags']:
-                tag_converted = unify_tag_str(tag)
-                if tag_converted in tags_dict:
-                    tags_dict[tag_converted] += 1
-                else:
-                    tags_dict[tag_converted] = 1
+    if use_tag_index:
+        print('全体で使用されている各タグの頻度を計算しています...')
+        for i in tqdm(range(len(file_list))):
+            data_file = file_list[i]
+            with open(meta_path + '/{}'.format(data_file), mode='r', encoding='utf-8') as f:
+                data = json.load(f)
+            if data['tags'] != None:
+                for tag in data['tags']:
+                    tag_converted = unify_tag_str(tag)
+                    if tag_converted in tags_dict:
+                        tags_dict[tag_converted] += data['view_data'][-1][1]    #記録上最新の再生数で重みづけ
+                    else:
+                        tags_dict[tag_converted] = data['view_data'][-1][1]
     print('各動画のメタデータを記録しています...')
     for i in tqdm(range(len(file_list))):
         data_file = file_list[i]
         temp_x = []
         with open(meta_path + '/{}'.format(data_file), mode='r', encoding='utf-8') as f:
             data = json.load(f)
-        platform = 0
-        if ViewDataGetter.check_platform(data['video_id']) == 'niconico':
-            platform = 1
-        temp_x.append(float(platform))                          #x[0]...Platform; YouTUbeなら0, ニコ動なら1
-        temp_x.append(float(str2int(data['subscriberCount'])))  #x[1]...チャンネル登録者数、あるいはフォロワー数
-        temp_x.append(float(data['length']))                    #x[2]...動画の長さ [s]
-        if use_genre:
-            temp_x.extend(genre_convertor(data['genre']))       #x[3]...動画のジャンル
-        tags_index = 0
-        if data['tags'] != None:
-            for tag in data['tags']:
-                tag_converted = unify_tag_str(tag)
-                if tag_converted in tags_dict:
-                    tags_index += tags_dict[tag_converted]
-        temp_x.append(float(tags_index))                        #x[4]...タグ係数（動画に付けられた各タグがそれぞれ全体でどの程度使用されているかの合計値を全タグで合算したもの）
+        if use_genre != True and use_genre != False and data['genre'] != use_genre:     #2021/06/18追記：特定のジャンルだけに絞り込みが可能となるようにしました。
+            continue
+        if use_platform:
+            platform = 0
+            if ViewDataGetter.check_platform(data['video_id']) == 'niconico':
+                platform = 1
+            temp_x.append(float(platform))                                      #x[0]...Platform; YouTUbeなら0, ニコ動なら1
+        if use_subscriberCount:
+            temp_x.append(conv_log(float(str2int(data['subscriberCount']))))    #x[1]...チャンネル登録者数、あるいはフォロワー数
+        if use_length:
+            temp_x.append(conv_log(float(data['length'])))                      #x[2]...動画の長さ [s]
+        if use_genre == True:
+            temp_x.extend(genre_convertor(data['genre']))                       #x[3]...動画のジャンル
+        if use_tag_index:
+            tags_index = 0
+            if data['tags'] != None:
+                for tag in data['tags']:
+                    tag_converted = unify_tag_str(tag)
+                    if tag_converted in tags_dict:
+                        tags_index += tags_dict[tag_converted]
+                tags_index = tags_index / len(data['tags'])                     #2021/06/18追記：合計値ではなく平均を使う
+            temp_x.append(conv_log(float(tags_index)))                          #x[4]...タグ係数（動画に付けられた各タグがそれぞれ全体でどの程度使用されているかの合計値を全タグで合算したもの）
         for j in data['view_data']:
+            if not permit_id_dupl and data['view_data'].index(j) != 0:          #2021/06/18追記：同じ動画からデータを取ることを許可するかどうか
+                continue
             add_x = []
             add_x.extend(temp_x)
-            add_x.append(np.math.log(float(j[0]) + 1.0e-4))     #x[5]...動画の投稿からの経過時間 [h] を対数変換したもの
+            if use_elapsed_time:
+                add_x.append(conv_log(float(j[0])))                             #x[5]...動画の投稿からの経過時間 [h] を対数変換したもの
             if data['training-test'] == 'training':
                 train_x.append(add_x)
                 train_y.append(float(j[1]))
@@ -243,6 +261,8 @@ def genre_convertor(genre):
 def image_data_convert(file_list, network, resize_method, include_top):
     print('画像から特徴量を抽出中…')
     output_features = []
+    if network == 'nsfw':
+        nsfw_model = predict.load_model('./nsfw.299x299.h5')
     if network == 'inception_resnet_v2':
         img_list = []
         for j in tqdm(range(len(file_list))):
@@ -310,6 +330,105 @@ def image_data_convert_v2_save(file_list, network, resize_method, include_top):
             json.dump(output_feature_flatten.tolist(), f, ensure_ascii=False, indent=4)
         print(img_file + "の特徴量をjson形式で保存しました。")
     return feature_size
+
+def image_to_saliency(file_list, meta_path='view_data', image_path='thumbnails'):
+    output_features = []
+    pd_output_features = {}
+    pd_output_features['average_saliency'] = []
+    pd_output_features['inner_saliency'] = []
+    pd_output_features['outer_saliency'] = []
+    for i in range(len(file_list)):
+        video_id = file_list[i]
+        print('画像の視覚的顕著性を計算中...{0}/{1}'.format(i + 1, len(file_list)))
+        with open(meta_path + '/{}'.format(video_id) + '.json', mode='r', encoding='utf-8') as f:
+            json_data = json.load(f)
+        if 'average_saliency' in json_data:
+            pd_output_features['average_saliency'].append(json_data['average_saliency'])
+            pd_output_features['inner_saliency'].append(json_data['inner_saliency'])
+            pd_output_features['outer_saliency'].append(json_data['outer_saliency'])
+            output_features.append([json_data['average_saliency'], json_data['inner_saliency'], json_data['outer_saliency']])
+        else:
+            im = Image.open(image_path + '/' + video_id + '.jpg')
+            im_resized = resize_image(im, int(im.width * 256 / im.height), 256, 'squash')
+            im_saliency = saliency(im_resized, mode='saliency')
+            avg_saliency = average_saliency(im_resized)
+            inner_saliency, outer_saliency = in_out_saliency(im_resized)
+            pd_output_features['average_saliency'].append(avg_saliency)
+            pd_output_features['inner_saliency'].append(inner_saliency)
+            pd_output_features['outer_saliency'].append(outer_saliency)
+            output_features.append([avg_saliency, inner_saliency, outer_saliency])
+            json_data['average_saliency'] = avg_saliency
+            json_data['inner_saliency'] = inner_saliency
+            json_data['outer_saliency'] = outer_saliency
+            with open(meta_path + '/{}'.format(video_id) + '.json', mode='w', encoding='utf-8') as f:
+                    json.dump(json_data, f, ensure_ascii=False, indent=4)
+    output_features = np.array(output_features)
+    return output_features, pd_output_features
+
+def image_to_nsfw_score(file_list, batch_size=100, use_nsfw_score=True, meta_path='view_data', image_path='thumbnails'):
+    output_features = []
+    pd_output_features = {}
+    pd_output_features['nsfw_score_hentai'] = []
+    pd_output_features['nsfw_score_porn'] = []
+    pd_output_features['nsfw_score_sexy'] = []
+    if use_nsfw_score:
+        nsfw_model = predict.load_model('./nsfw_mobilenet2.224x224.h5')
+        for i in range(-(-len(file_list)//batch_size)):
+            print('画像のNSFWスコアを計算中...{0}/{1}'.format(i + 1, -(-len(file_list)//batch_size)))
+            if i == -(-len(file_list)//batch_size) - 1:
+                batch = file_list[batch_size*i : ]
+            else:
+                batch = file_list[batch_size*i : batch_size*i+batch_size]
+            image_paths = [image_path + '/' + video_id + '.jpg' for video_id in batch]
+            video_ids = [video_id for video_id in batch]
+            #既にデータファイル側に記録されていればそれを使う
+            data_used_nsfw = 0
+            for video_id in batch:
+                with open(meta_path + '/{}'.format(video_id) + '.json', mode='r', encoding='utf-8') as f:
+                    json_data = json.load(f)
+                if 'hentai' in json_data:
+                    data_used_nsfw += 1
+            if data_used_nsfw == len(batch):
+                nsfw_score_dict = {}
+                for video_id in batch:
+                    nsfw_score_dict[image_path + '/' + video_id + '.jpg'] = {'hentai':json_data['hentai'], 
+                                                                             'porn':json_data['porn'],
+                                                                             'sexy':json_data['sexy']}
+            else:
+                nsfw_score_dict = predict.classify(nsfw_model, image_paths) #GantMan氏のモデルを使用。
+            one_batch_features = []
+            #時間だけが異なるデータが重複しているのでその対策
+            duplicating = {}
+            for j in batch:
+                duplicating[j] = batch.count(j)
+            for key in nsfw_score_dict:
+                video_id = video_ids[image_paths.index(key)]
+                one_video_feature = []
+                #後で利用できるようにjsonファイルを更新しておく
+                with open(meta_path + '/{}'.format(video_id) + '.json', mode='r', encoding='utf-8') as f:
+                    json_data = json.load(f)
+                if 'hentai' not in json_data:
+                    json_data['hentai'] = nsfw_score_dict[key]['hentai']
+                if 'porn' not in json_data:
+                    json_data['porn'] = nsfw_score_dict[key]['porn']
+                if 'sexy' not in json_data:
+                    json_data['sexy'] = nsfw_score_dict[key]['sexy']
+                with open(meta_path + '/{}'.format(video_id) + '.json', mode='w', encoding='utf-8') as f:
+                    json.dump(json_data, f, ensure_ascii=False, indent=4)
+                #それぞれ0~1の間でその種類に属する確率を表している数値。
+                one_video_feature.append(nsfw_score_dict[key]['hentai'])    #性的なイラスト
+                one_video_feature.append(nsfw_score_dict[key]['porn'])      #実写のポルノ
+                one_video_feature.append(nsfw_score_dict[key]['sexy'])      #ポルノというほどではないがやや性的な画像
+                #そのほか、'drawings'（健全なアニメ等のイラスト）, 'neutral'（普通の実写画像）というNSFWではない要素もあるが、
+                #今回は必要ないので無視。
+                for k in range(duplicating[video_id]):
+                    one_batch_features.append(one_video_feature)
+                    pd_output_features['nsfw_score_hentai'].append(nsfw_score_dict[key]['hentai'])
+                    pd_output_features['nsfw_score_porn'].append(nsfw_score_dict[key]['porn'])
+                    pd_output_features['nsfw_score_sexy'].append(nsfw_score_dict[key]['sexy'])
+            output_features.extend(one_batch_features)
+    output_features = np.array(output_features)
+    return output_features, pd_output_features
 
 def connect_two_x(x1, x2):
     if len(x1) != len(x2):
@@ -431,17 +550,118 @@ def list_to_pandas(datalist):
             data_dict[k].append(datalist[i][k])
     return data_dict
 
-#######################################################################################################################################
+def connect_two_x_pd(x1, x2):
+    for key in x2:
+        x1[key] = x2[key]
+    return x1
 
-use_genre = False
+def main_running(use_genre=True, use_nsfw_score=False, use_saliency=True, predict=False,
+                 view_data_path="./view_data", save_model_path='./nnw', save_result_path='./results'):
+    start_time = time.time()
+    #メタデータを読み込み
+    x_train, y_train, x_test, y_test, train_file_name, test_file_name, \
+        pd_test_x, tags_dict = read_view_data(view_data_path, use_genre=use_genre)
+    print('data size is train:{0}, test:{1}'.format(len(x_train), len(x_test)))
+    x_train = np.array(x_train)
+    x_test = np.array(x_test)
+    
+    #まずメタデータのみから予測
+    if predict:
+        model = training_ridge(x_train, y_train, save_model_path)
+        meta_predicted_y_train = model.predict(x_train).flatten()
+        meta_predicted_y_test = model.predict(x_test).flatten()
+    
+        result = pd_test_x
+        result['predicted view by metadata'] = meta_predicted_y_test.tolist()
+    else:
+        result = pd_test_x
+
+    #教師データに画像の情報を付加
+    if use_nsfw_score:
+        x_nsfw_train, pd_x_nsfw_train = image_to_nsfw_score(train_file_name)
+        x_train = connect_two_x(x_train, x_nsfw_train)
+    if use_saliency:
+        x_saliency_train, pd_x_saliency_train = image_to_saliency(train_file_name)
+        x_train = connect_two_x(x_train, x_saliency_train)
+    
+    if predict:
+        #画像から抽出した特徴量を用いて補正値(メタデータのみから予測した値と実際の値との差分)を予測
+        #これが「画像の持つ再生数増加効果の大きさ」を表す。
+        model2 = training_ridge(x_train, y_train - meta_predicted_y_train, save_model_path)
+    
+    #テストデータに画像の情報を付加
+    if use_nsfw_score:
+        x_nsfw_test, pd_x_nsfw_test = image_to_nsfw_score(test_file_name)
+        x_test = connect_two_x(x_test, x_nsfw_test)
+    if use_saliency:
+        x_saliency_test, pd_x_saliency_test = image_to_saliency(test_file_name)
+        x_test = connect_two_x(x_test, x_saliency_test)
+        
+    if predict:
+        meta_predicted_delta_y_test = model2.predict(x_test).flatten()
+        meta_predicted__y_test = meta_predicted_y_test + meta_predicted_delta_y_test
+    
+    if use_nsfw_score:
+        result = connect_two_x_pd(result, pd_x_nsfw_test)
+    if use_saliency:
+        result = connect_two_x_pd(result, pd_x_saliency_test)
+    
+    if predict:
+        result['predicted delta view by image'] = meta_predicted_delta_y_test.tolist()
+        result['predicted view'] = meta_predicted__y_test.tolist()
+    
+    #Pandasを使って後々データ処理しやすいように結果をCSVファイルに出力
+    df = pd.DataFrame(result)
+    df.head()
+    df.to_csv('{0}/{1}.csv'.format(save_result_path, datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')))
+    tags_dict = sorted(tags_dict.items(), key=lambda x:x[1], reverse=True)
+    with open('{0}/{1}.json'.format(save_result_path, datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')), mode='w', encoding='utf-8') as f:
+        json.dump(tags_dict, f, ensure_ascii=False, indent=4)
+        
+    tag_csv = {}
+    tag_csv['tag name'] = []
+    tag_csv['value'] = []
+    for tag in tags_dict:
+        tag_csv['tag name'].append(tag[0])
+        tag_csv['value'].append(tag[1])
+    df_tag = pd.DataFrame(tag_csv)
+    df_tag.to_csv('{0}/{1}_tags.csv'.format(save_result_path, datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')))
+    elapsed_time = time.time() - start_time
+    print('elapsed time: {} [sec]'.format(elapsed_time))
+    pass
+
+#######################################################################################################################################
+'''model = predict.load_model('./nsfw_mobilenet2.224x224.h5')
+print(predict.classify(model, ['thumbnails/sm37321755.jpg', 'thumbnails/sm37321853.jpg']))
+
+'''
+main_running()
+
+
+'''use_genre = False
 x_train, y_train, x_test, y_test, train_file_name, test_file_name, pd_test_x, tags_dict = read_view_data("./view_data", use_genre=use_genre)
+
+x_train = np.array(x_train)
+x_test = np.array(x_test)
+model = training_ridge(x_train, y_train, './nnw')
+meta_predicted_y_test = model.predict(x_test).flatten()
+
 result = pd_test_x
+result['predicted view by metadata'] = meta_predicted_y_test.tolist()
 df = pd.DataFrame(result)
 df.head()
 df.to_csv('./results/{}.csv'.format(datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')))
 tags_dict = sorted(tags_dict.items(), key=lambda x:x[1], reverse=True)
 with open('./results/{}.json'.format(datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')), mode='w', encoding='utf-8') as f:
     json.dump(tags_dict, f, ensure_ascii=False, indent=4)
+tag_csv = {}
+tag_csv['tag name'] = []
+tag_csv['value'] = []
+for tag in tags_dict:
+    tag_csv['tag name'].append(tag[0])
+    tag_csv['value'].append(tag[1])
+df_tag = pd.DataFrame(tag_csv)
+df_tag.to_csv('./results/{}_tags.csv'.format(datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')))'''
 
 '''method = 'ridge'
 nnw_shape = [100,200]
